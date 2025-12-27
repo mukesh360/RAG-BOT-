@@ -6,3 +6,4 @@ langchain-huggingface
 chromadb
 sentence-transformers
 beautifulsoup4
+streamlit
