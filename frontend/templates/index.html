@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocIntel AI - Universal RAG System</title>
+    <meta name="description"
+        content="Intelligent document Q&A powered by RAG. Upload your documents and get instant, accurate answers.">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Cursor Glow Effect -->
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+        <div class="particles" id="particles"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <h1>DocIntel AI</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-reset" onclick="resetChat()" title="Start new conversation">
+                        <i class="fas fa-rotate-right"></i>
+                        <span>New Chat</span>
+                    </button>
+                    <span class="tagline">✨ Universal RAG System</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-cloud-arrow-up"></i> Upload Documents</h3>
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="fileInput" multiple accept=".csv,.pdf,.docx,.txt,.html" hidden>
+                        <div class="upload-content" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open"></i>
+                            <p>Drop or click</p>
+                            <span class="file-types">CSV • PDF • DOCX • TXT • HTML</span>
+                        </div>
+                    </div>
+                    <div id="fileList" class="file-list"></div>
+                    <button id="uploadBtn" class="btn-upload" onclick="uploadFiles()" disabled>
+                        <i class="fas fa-bolt"></i>
+                        <span>Process & Index</span>
+                    </button>
+                    <div id="uploadStatus" class="upload-status"></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-wand-magic-sparkles"></i> Features</h3>
+                    <p class="about-text">
+                        ✨ Multi-format document support<br>
+                        🔍 Hybrid semantic + keyword search<br>
+                        🎯 Accurate, grounded answers<br>
+                        ⚡ Real-time document indexing
+                    </p>
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-area">
+                <div class="chat-container" id="chatContainer">
+                    <!-- Welcome Message -->
+                    <div class="welcome-message" id="welcomeMessage">
+                        <div class="welcome-icon">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <h2>Hello! I'm DocIntel AI</h2>
+                        <p>Your intelligent document assistant. Ask me anything about your files - I'll find the answers
+                            instantly.</p>
+
+                        <!-- Suggested Prompts -->
+                        <div class="suggested-prompts">
+                            <button class="prompt-btn" onclick="useSuggestion('What documents do you have?')">
+                                <i class="fas fa-folder-tree"></i>
+                                <span>What documents do you have?</span>
+                            </button>
+                            <button class="prompt-btn" onclick="useSuggestion('Summarize the key topics')">
+                                <i class="fas fa-list-check"></i>
+                                <span>Summarize the key topics</span>
+                            </button>
+                            <button class="prompt-btn" onclick="useSuggestion('What insights can you provide?')">
+                                <i class="fas fa-lightbulb"></i>
+                                <span>What insights can you provide?</span>
+                            </button>
+                            <button class="prompt-btn" onclick="useSuggestion('How can you help me?')">
+                                <i class="fas fa-hand-holding-heart"></i>
+                                <span>How can you help me?</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Messages will be inserted here -->
+                </div>
+
+                <!-- Typing Indicator -->
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="typing-bubble">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+
+                <!-- Legacy Loading Spinner (hidden) -->
+                <div class="loading-spinner" id="loadingSpinner">
+                    <div class="spinner"></div>
+                    <span>Analyzing...</span>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-area">
+                    <div class="input-container">
+                        <input type="text" id="queryInput" placeholder="Ask me anything about your documents..."
+                            onkeypress="handleKeyPress(event)" autocomplete="off">
+                        <button id="sendBtn" onclick="sendQuery()">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>

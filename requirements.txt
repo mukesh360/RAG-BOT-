@@ -1,9 +1,27 @@
+# Core LangChain
 langchain
 langchain-community
 langchain-ollama
 langchain-chroma
 langchain-huggingface
+
+# Vector DB and Search
 chromadb
 sentence-transformers
+rank-bm25
+
+# Document Loaders
 beautifulsoup4
-streamlit
+pypdf
+python-docx
+docx2txt
+
+# Data Processing
+pandas
+
+# FastAPI Backend
+fastapi
+uvicorn[standard]
+python-multipart
+jinja2
+aiofiles
