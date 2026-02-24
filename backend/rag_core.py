@@ -43,11 +43,33 @@ def is_csv_intent(query: str) -> bool:
     return extract_req_id(q) is not None or any(k in q for k in keywords)
 
 # ============================================================
-# UNIVERSAL RAG CORE (UNCHANGED LOGIC)
+# DEFAULT SYSTEM PROMPT
+# ============================================================
+
+DEFAULT_SYSTEM_PROMPT = """You are a document assistant that ONLY answers based on the provided context.
+
+CRITICAL RULES - YOU MUST FOLLOW THESE:
+1. ONLY use information that is EXPLICITLY stated in the context below
+2. If the answer is NOT in the context, say: "I cannot find this information in the loaded documents."
+3. NEVER make up, infer, or assume information that isn't directly in the context
+4. NEVER use your own knowledge - ONLY the context provided
+5. If you're unsure, say you cannot find the information rather than guessing
+6. Quote or reference specific parts of the context when answering
+7. Be concise and factual"""
+
+# ============================================================
+# UNIVERSAL RAG CORE (CONFIGURABLE)
 # ============================================================
 
 class UniversalRAG:
     def __init__(self):
+        # Configurable parameters
+        self.model_name = "qwen2.5:7b"
+        self.temperature = 0.0
+        self.top_k = 4
+        self.chunk_size = 1000
+        self.system_prompt = DEFAULT_SYSTEM_PROMPT
+
         self.embeddings = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"},
@@ -55,18 +77,49 @@ class UniversalRAG:
         )
 
         self.llm = ChatOllama(
-            model="qwen2.5:7b",
-            temperature=0
+            model=self.model_name,
+            temperature=self.temperature
         )
 
         self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
+            chunk_size=self.chunk_size,
             chunk_overlap=150
         )
 
         self.vector_db = None
         self.bm25_indexes = {}
         self.bm25_docs = {}
+
+    # ---------------- CONFIG ----------------
+    def get_config(self) -> dict:
+        return {
+            "model_name": self.model_name,
+            "temperature": self.temperature,
+            "top_k": self.top_k,
+            "chunk_size": self.chunk_size,
+            "system_prompt": self.system_prompt
+        }
+
+    def update_config(self, **kwargs):
+        if "model_name" in kwargs and kwargs["model_name"] != self.model_name:
+            self.model_name = kwargs["model_name"]
+            self.llm = ChatOllama(model=self.model_name, temperature=self.temperature)
+
+        if "temperature" in kwargs and kwargs["temperature"] != self.temperature:
+            self.temperature = kwargs["temperature"]
+            self.llm = ChatOllama(model=self.model_name, temperature=self.temperature)
+
+        if "top_k" in kwargs:
+            self.top_k = kwargs["top_k"]
+
+        if "chunk_size" in kwargs and kwargs["chunk_size"] != self.chunk_size:
+            self.chunk_size = kwargs["chunk_size"]
+            self.splitter = RecursiveCharacterTextSplitter(
+                chunk_size=self.chunk_size, chunk_overlap=150
+            )
+
+        if "system_prompt" in kwargs and kwargs["system_prompt"]:
+            self.system_prompt = kwargs["system_prompt"]
 
     # ---------------- CSV (UNCHANGED) ----------------
     def load_csv(self, path):
@@ -155,11 +208,11 @@ class UniversalRAG:
 
         # Vector DB (PDF / DOCX)
         if self.vector_db:
-            doc_results = self.vector_db.similarity_search(query, k=4)
+            doc_results = self.vector_db.similarity_search(query, k=self.top_k)
 
         return csv_results, doc_results
 
-    # ---------------- ANSWER (ZERO HALLUCINATION) ----------------
+    # ---------------- ANSWER (CONFIGURABLE PROMPT) ----------------
     def answer(self, query):
         csv_docs, doc_docs = self.search(query)
         all_docs = csv_docs + doc_docs
@@ -169,25 +222,9 @@ class UniversalRAG:
 
         context = "\n\n---\n\n".join(d.page_content for d in all_docs)
 
-        # STRICT ANTI-HALLUCINATION PROMPT
-        prompt = ChatPromptTemplate.from_template("""You are a document assistant that ONLY answers based on the provided context.
-
-CRITICAL RULES - YOU MUST FOLLOW THESE:
-1. ONLY use information that is EXPLICITLY stated in the context below
-2. If the answer is NOT in the context, say: "I cannot find this information in the loaded documents."
-3. NEVER make up, infer, or assume information that isn't directly in the context
-4. NEVER use your own knowledge - ONLY the context provided
-5. If you're unsure, say you cannot find the information rather than guessing
-6. Quote or reference specific parts of the context when answering
-7. Be concise and factual
-
-CONTEXT (This is the ONLY information you can use):
-{context}
-
-USER QUESTION:
-{question}
-
-ANSWER (Remember: ONLY use information from the context above, nothing else):""")
+        prompt = ChatPromptTemplate.from_template(
+            self.system_prompt + "\n\nCONTEXT (This is the ONLY information you can use):\n{context}\n\nUSER QUESTION:\n{question}\n\nANSWER:"
+        )
 
         answer = (
             prompt | self.llm | StrOutputParser()

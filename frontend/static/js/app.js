@@ -351,6 +351,9 @@ async function sendQuery() {
         // Add bot message with typing effect
         addMessage('bot', data.answer, formatTimestamp(data.timestamp), data.sources);
 
+        // Speak the response if TTS is enabled
+        speakText(data.answer);
+
     } catch (error) {
         hideTyping();
         addMessage('bot', 'Sorry, an error occurred while processing your question. Please try again.', timestamp, []);
@@ -773,3 +776,271 @@ function formatContent(text) {
 
     return formatted;
 }
+
+// ============================================================
+// SPEECH-TO-TEXT (Voice Input)
+// ============================================================
+
+let recognition = null;
+let isRecording = false;
+
+function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        console.warn('Speech Recognition not supported in this browser.');
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) {
+            micBtn.style.opacity = '0.4';
+            micBtn.style.cursor = 'not-allowed';
+            micBtn.title = 'Voice input not supported in this browser. Use Chrome or Edge.';
+        }
+        return;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+        isRecording = true;
+        const micBtn = document.getElementById('micBtn');
+        micBtn.classList.add('recording');
+        micBtn.querySelector('i').className = 'fas fa-stop';
+        document.getElementById('voiceStatus').textContent = '🎙️ Listening...';
+    };
+
+    recognition.onresult = (event) => {
+        const input = document.getElementById('queryInput');
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            } else {
+                interimTranscript += event.results[i][0].transcript;
+            }
+        }
+
+        if (finalTranscript) {
+            input.value = finalTranscript;
+            document.getElementById('voiceStatus').textContent = '✅ Got it!';
+        } else {
+            input.value = interimTranscript;
+            document.getElementById('voiceStatus').textContent = '🎙️ Listening...';
+        }
+    };
+
+    recognition.onend = () => {
+        isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+        micBtn.classList.remove('recording');
+        micBtn.querySelector('i').className = 'fas fa-microphone';
+
+        const input = document.getElementById('queryInput');
+        if (input.value.trim()) {
+            document.getElementById('voiceStatus').textContent = '';
+            sendQuery();
+        } else {
+            document.getElementById('voiceStatus').textContent = '';
+        }
+    };
+
+    recognition.onerror = (event) => {
+        isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+        micBtn.classList.remove('recording');
+        micBtn.querySelector('i').className = 'fas fa-microphone';
+
+        if (event.error === 'not-allowed') {
+            document.getElementById('voiceStatus').textContent = '🚫 Mic permission denied';
+            showNotification('Microphone access denied. Please allow mic permission.', 'error');
+        } else if (event.error !== 'aborted') {
+            document.getElementById('voiceStatus').textContent = '';
+        }
+    };
+}
+
+function toggleMic() {
+    if (!recognition) {
+        showNotification('Voice input not supported in this browser. Use Chrome or Edge.', 'error');
+        return;
+    }
+
+    if (isRecording) {
+        recognition.stop();
+    } else {
+        try {
+            recognition.start();
+        } catch (e) {
+            // Already started
+            recognition.stop();
+        }
+    }
+}
+
+// ============================================================
+// TEXT-TO-SPEECH (Voice Output)
+// ============================================================
+
+let ttsEnabled = false;
+
+function toggleTTS() {
+    ttsEnabled = !ttsEnabled;
+    const btn = document.getElementById('ttsToggle');
+
+    if (ttsEnabled) {
+        btn.classList.add('active');
+        btn.querySelector('i').className = 'fas fa-volume-high';
+        btn.querySelector('span').textContent = 'Voice On';
+        showNotification('Voice output enabled', 'success');
+    } else {
+        btn.classList.remove('active');
+        btn.querySelector('i').className = 'fas fa-volume-xmark';
+        btn.querySelector('span').textContent = 'Voice Off';
+        speechSynthesis.cancel();
+        showNotification('Voice output disabled', 'info');
+    }
+}
+
+function speakText(text) {
+    if (!ttsEnabled || !window.speechSynthesis) return;
+
+    // Cancel any ongoing speech
+    speechSynthesis.cancel();
+
+    // Clean text for speaking
+    const cleanText = text
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`(.*?)`/g, '$1')
+        .replace(/\[Source:.*?\]/g, '')
+        .replace(/---/g, '')
+        .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.9;
+
+    // Try to use a nice English voice
+    const voices = speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+        v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Daniel'))
+    ) || voices.find(v => v.lang.startsWith('en'));
+
+    if (preferred) {
+        utterance.voice = preferred;
+    }
+
+    speechSynthesis.speak(utterance);
+}
+
+// Preload voices
+if (window.speechSynthesis) {
+    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
+
+// ============================================================
+// CONFIG MODAL (Agent Settings)
+// ============================================================
+
+async function openSettings() {
+    const modal = document.getElementById('configModal');
+    modal.classList.add('active');
+
+    // Load current config from server
+    try {
+        const response = await fetch('/config');
+        if (response.ok) {
+            const config = await response.json();
+            document.getElementById('cfgModel').value = config.model_name || '';
+            document.getElementById('cfgTemp').value = config.temperature || 0;
+            document.getElementById('tempValue').textContent = (config.temperature || 0).toFixed(1);
+            document.getElementById('cfgTopK').value = config.top_k || 4;
+            document.getElementById('cfgChunk').value = config.chunk_size || 1000;
+            document.getElementById('cfgPrompt').value = config.system_prompt || '';
+        }
+    } catch (e) {
+        console.error('Failed to load config:', e);
+    }
+
+    // Temperature slider live update
+    const tempSlider = document.getElementById('cfgTemp');
+    tempSlider.oninput = () => {
+        document.getElementById('tempValue').textContent = parseFloat(tempSlider.value).toFixed(1);
+    };
+}
+
+function closeSettings() {
+    const modal = document.getElementById('configModal');
+    modal.classList.remove('active');
+}
+
+async function saveSettings() {
+    const config = {
+        model_name: document.getElementById('cfgModel').value.trim(),
+        temperature: parseFloat(document.getElementById('cfgTemp').value),
+        top_k: parseInt(document.getElementById('cfgTopK').value),
+        chunk_size: parseInt(document.getElementById('cfgChunk').value),
+        system_prompt: document.getElementById('cfgPrompt').value.trim() || null
+    };
+
+    try {
+        const response = await fetch('/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+            showNotification('Agent configuration saved!', 'success');
+            closeSettings();
+        } else {
+            throw new Error('Failed to save config');
+        }
+    } catch (e) {
+        showNotification('Error saving configuration: ' + e.message, 'error');
+        console.error('Config save error:', e);
+    }
+}
+
+// Close modal on overlay click
+document.addEventListener('click', (e) => {
+    if (e.target.id === 'configModal') {
+        closeSettings();
+    }
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeSettings();
+    }
+});
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+
+document.addEventListener('keydown', (e) => {
+    // Ctrl+M = Toggle Mic
+    if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+        e.preventDefault();
+        toggleMic();
+    }
+});
+
+// ============================================================
+// INIT VOICE ON PAGE LOAD
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSpeechRecognition();
+});
+

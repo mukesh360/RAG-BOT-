@@ -43,11 +43,18 @@
                     <h1>DocIntel AI</h1>
                 </div>
                 <div class="header-actions">
+                    <button class="btn-voice-toggle" id="ttsToggle" onclick="toggleTTS()" title="Toggle voice output">
+                        <i class="fas fa-volume-xmark"></i>
+                        <span>Voice Off</span>
+                    </button>
+                    <button class="btn-settings" onclick="openSettings()" title="Agent Settings">
+                        <i class="fas fa-gear"></i>
+                    </button>
                     <button class="btn-reset" onclick="resetChat()" title="Start new conversation">
                         <i class="fas fa-rotate-right"></i>
                         <span>New Chat</span>
                     </button>
-                    <span class="tagline">✨ Universal RAG System</span>
+                    <span class="tagline">✨ Agentic RAG Framework</span>
                 </div>
             </div>
         </header>
@@ -142,14 +149,58 @@
                 <!-- Chat Input -->
                 <div class="chat-input-area">
                     <div class="input-container">
+                        <button class="btn-mic" id="micBtn" onclick="toggleMic()" title="Voice input (Ctrl+M)">
+                            <i class="fas fa-microphone"></i>
+                        </button>
                         <input type="text" id="queryInput" placeholder="Ask me anything about your documents..."
                             onkeypress="handleKeyPress(event)" autocomplete="off">
                         <button id="sendBtn" onclick="sendQuery()">
                             <i class="fas fa-paper-plane"></i>
                         </button>
                     </div>
+                    <div class="voice-status" id="voiceStatus"></div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div class="modal-overlay" id="configModal">
+        <div class="config-modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-sliders"></i> Agent Configuration</h2>
+                <button class="modal-close" onclick="closeSettings()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="config-group">
+                    <label for="cfgModel">LLM Model</label>
+                    <input type="text" id="cfgModel" placeholder="qwen2.5:7b">
+                </div>
+                <div class="config-group">
+                    <label for="cfgTemp">Temperature <span class="config-value" id="tempValue">0.0</span></label>
+                    <input type="range" id="cfgTemp" min="0" max="1" step="0.1" value="0">
+                </div>
+                <div class="config-row">
+                    <div class="config-group">
+                        <label for="cfgTopK">Top-K Results</label>
+                        <input type="number" id="cfgTopK" min="1" max="20" value="4">
+                    </div>
+                    <div class="config-group">
+                        <label for="cfgChunk">Chunk Size</label>
+                        <input type="number" id="cfgChunk" min="200" max="4000" step="100" value="1000">
+                    </div>
+                </div>
+                <div class="config-group">
+                    <label for="cfgPrompt">System Prompt</label>
+                    <textarea id="cfgPrompt" rows="5" placeholder="Custom system prompt..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal-cancel" onclick="closeSettings()">Cancel</button>
+                <button class="btn-modal-save" onclick="saveSettings()"><i class="fas fa-check"></i> Save</button>
+            </div>
         </div>
     </div>
 

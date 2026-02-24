@@ -38,3 +38,21 @@ class HealthResponse(BaseModel):
     """Response model for /health endpoint"""
     status: str
     timestamp: str
+
+
+class AgentConfig(BaseModel):
+    """Configurable agent settings"""
+    model_name: Optional[str] = "qwen2.5:7b"
+    temperature: Optional[float] = 0.0
+    top_k: Optional[int] = 4
+    chunk_size: Optional[int] = 1000
+    system_prompt: Optional[str] = None
+
+
+class ConfigResponse(BaseModel):
+    """Response model for /config endpoint"""
+    model_name: str
+    temperature: float
+    top_k: int
+    chunk_size: int
+    system_prompt: str

@@ -15,7 +15,7 @@ from fastapi.requests import Request
 from fastapi.responses import HTMLResponse
 
 from .rag_core import UniversalRAG
-from .schemas import QueryRequest, QueryResponse, HistoryItem, UploadResponse, HealthResponse
+from .schemas import QueryRequest, QueryResponse, HistoryItem, UploadResponse, HealthResponse, AgentConfig, ConfigResponse
 from .storage import history_storage
 
 # ============================================================
@@ -77,6 +77,20 @@ async def health_check():
         status="healthy",
         timestamp=datetime.now().isoformat()
     )
+
+
+@app.get("/config", response_model=ConfigResponse)
+async def get_config():
+    """Get current agent configuration"""
+    return ConfigResponse(**rag.get_config())
+
+
+@app.post("/config", response_model=ConfigResponse)
+async def update_config(config: AgentConfig):
+    """Update agent configuration at runtime"""
+    update_data = {k: v for k, v in config.dict().items() if v is not None}
+    rag.update_config(**update_data)
+    return ConfigResponse(**rag.get_config())
 
 
 @app.get("/history", response_model=List[HistoryItem])
