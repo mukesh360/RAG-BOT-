@@ -56,3 +56,20 @@ class ConfigResponse(BaseModel):
     top_k: int
     chunk_size: int
     system_prompt: str
+
+
+# ============================================================
+# AUTH MODELS
+# ============================================================
+
+class AuthRequest(BaseModel):
+    """Request model for /auth/signup and /auth/login"""
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    """Response model for auth endpoints"""
+    access_token: str
+    user_email: str
+    message: str

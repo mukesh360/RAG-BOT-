@@ -25,3 +25,7 @@ uvicorn[standard]
 python-multipart
 jinja2
 aiofiles
+
+# Supabase Auth
+supabase
+python-dotenv

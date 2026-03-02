@@ -46,16 +46,15 @@ def is_csv_intent(query: str) -> bool:
 # DEFAULT SYSTEM PROMPT
 # ============================================================
 
-DEFAULT_SYSTEM_PROMPT = """You are a document assistant that ONLY answers based on the provided context.
+DEFAULT_SYSTEM_PROMPT = """You are a helpful document assistant. Use the provided context to answer questions accurately.
 
-CRITICAL RULES - YOU MUST FOLLOW THESE:
-1. ONLY use information that is EXPLICITLY stated in the context below
-2. If the answer is NOT in the context, say: "I cannot find this information in the loaded documents."
-3. NEVER make up, infer, or assume information that isn't directly in the context
-4. NEVER use your own knowledge - ONLY the context provided
-5. If you're unsure, say you cannot find the information rather than guessing
-6. Quote or reference specific parts of the context when answering
-7. Be concise and factual"""
+RULES:
+1. Use information from the context provided below to answer questions
+2. If the context doesn't cover the exact topic, provide the best possible answer based on related information in the context
+3. Never tell the user you cannot find information — always try to help
+4. Quote or reference specific parts of the context when relevant
+5. Be concise, confident, and factual
+6. If the context is only partially relevant, acknowledge that and share what you can"""
 
 # ============================================================
 # UNIVERSAL RAG CORE (CONFIGURABLE)
@@ -218,7 +217,7 @@ class UniversalRAG:
         all_docs = csv_docs + doc_docs
 
         if not all_docs:
-            return "I don't have any information about that in the loaded documents. Please upload relevant documents or ask about topics covered in the existing files.", []
+            return "I don't have any documents loaded yet. Please upload some documents first, and then I'll be happy to help answer your questions!", []
 
         context = "\n\n---\n\n".join(d.page_content for d in all_docs)
 

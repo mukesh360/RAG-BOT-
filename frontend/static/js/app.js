@@ -50,7 +50,7 @@ async function resetChat() {
 
     // Optional: Clear server history
     try {
-        await fetch('/history/clear', { method: 'POST' });
+        await authFetch('/history/clear', { method: 'POST' });
     } catch (e) {
         // Server might not have this endpoint, that's okay
     }
@@ -110,6 +110,12 @@ document.head.appendChild(notifStyle);
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Auth guard: redirect to login if not authenticated
+    if (typeof isLoggedIn === 'function' && !isLoggedIn()) {
+        window.location.href = '/login';
+        return;
+    }
+
     loadHistory();
     setupFileInput();
     setupDragDrop();
@@ -328,7 +334,7 @@ async function sendQuery() {
     showTyping();
 
     try {
-        const response = await fetch('/query', {
+        const response = await authFetch('/query', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -353,7 +359,6 @@ async function sendQuery() {
 
         // Speak the response if TTS is enabled
         speakText(data.answer);
-
     } catch (error) {
         hideTyping();
         addMessage('bot', 'Sorry, an error occurred while processing your question. Please try again.', timestamp, []);
@@ -398,26 +403,222 @@ function typeText(element, text, callback) {
 
 async function loadHistory() {
     try {
-        const response = await fetch('/history');
-        if (!response.ok) return;
+        const response = await authFetch('/history');
+        const data = await response.json();
 
-        const history = await response.json();
+        if (!response.ok) {
+            console.error('History API error:', response.status, data);
+            return;
+        }
 
-        if (history.length > 0) {
+        console.log('History loaded:', data.length, 'items');
+
+        if (data.length > 0) {
             hideWelcome();
 
-            history.forEach((item, index) => {
+            data.forEach((item, index) => {
                 setTimeout(() => {
                     addMessage('user', item.question, formatTimestamp(item.timestamp));
                     addMessage('bot', item.answer, formatTimestamp(item.timestamp), item.sources);
                 }, index * 100);
             });
 
-            setTimeout(scrollToBottom, history.length * 100 + 200);
+            setTimeout(scrollToBottom, data.length * 100 + 200);
         }
+
+        // Populate sidebar history
+        // renderSidebarHistory(data);
     } catch (error) {
         console.error('Failed to load history:', error);
     }
+}
+
+// ============================================================
+// SIDEBAR — DOCUMENTS & CHAT HISTORY
+// ============================================================
+
+function formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getDocIconClass(fileType) {
+    const type = (fileType || '').toLowerCase();
+    if (type === 'pdf') return 'doc-pdf';
+    if (type === 'csv') return 'doc-csv';
+    if (type === 'docx') return 'doc-docx';
+    if (type === 'txt') return 'doc-txt';
+    if (type === 'html') return 'doc-html';
+    return 'doc-default';
+}
+
+function formatDocName(filename) {
+    if (!filename) return 'Unknown';
+    // Remove extension for display, keep it in badge
+    const parts = filename.split('.');
+    if (parts.length > 1) {
+        const name = parts.slice(0, -1).join('.');
+        return name.length > 22 ? name.substring(0, 22) + '…' : name;
+    }
+    return filename.length > 22 ? filename.substring(0, 22) + '…' : filename;
+}
+
+function formatHistoryTime(timestamp) {
+    if (!timestamp) return '';
+    try {
+        const d = new Date(timestamp);
+        const now = new Date();
+        const diff = now - d;
+
+        // Within last hour
+        if (diff < 3600000) {
+            const mins = Math.floor(diff / 60000);
+            return mins <= 1 ? 'Just now' : mins + 'm ago';
+        }
+        // Today
+        if (d.toDateString() === now.toDateString()) {
+            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+        // Yesterday
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (d.toDateString() === yesterday.toDateString()) {
+            return 'Yesterday';
+        }
+        // Older
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch (e) {
+        return '';
+    }
+}
+
+async function loadSidebarDocuments() {
+    const container = document.getElementById('documentsList');
+    if (!container) return;
+
+    try {
+        console.log('Loading sidebar documents...');
+        const response = await authFetch('/documents');
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('Documents API error:', response.status, data);
+            container.innerHTML = '<div class="sidebar-empty">Failed to load documents</div>';
+            return;
+        }
+
+        console.log('Documents loaded:', data.length, 'items');
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="sidebar-empty">No documents uploaded yet</div>';
+            return;
+        }
+
+        container.innerHTML = data.map(doc => {
+            const iconClass = getDocIconClass(doc.file_type);
+            const ext = (doc.file_type || '?').toUpperCase();
+            const size = formatFileSize(doc.file_size);
+            const displayName = formatDocName(doc.filename);
+            const time = formatHistoryTime(doc.created_at);
+            return `
+                <div class="sidebar-item" title="${doc.filename || 'Unknown'}">
+                    <div class="item-icon ${iconClass}">${ext}</div>
+                    <div class="item-text">
+                        <div class="item-name">${displayName}</div>
+                        <div class="item-meta">${size} · ${time}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Failed to load documents:', e);
+        container.innerHTML = '<div class="sidebar-empty">Error loading documents</div>';
+    }
+}
+
+// Store full history for conversation loading
+let fullChatHistory = [];
+
+async function refreshSidebarHistory() {
+    try {
+        const response = await authFetch('/history');
+        if (!response.ok) return;
+        const data = await response.json();
+        renderSidebarHistory(data);
+    } catch (e) {
+        console.error('Sidebar history refresh failed:', e);
+    }
+}
+
+function renderSidebarHistory(history) {
+    const container = document.getElementById('sidebarHistory');
+    if (!container) return;
+
+    // Store for conversation loading
+    fullChatHistory = history || [];
+
+    if (!history || history.length === 0) {
+        container.innerHTML = '<div class="sidebar-empty">No conversations yet</div>';
+        return;
+    }
+
+    console.log('Rendering sidebar history:', history.length, 'items');
+
+    // Show most recent first, max 25 items, deduplicate by question
+    const seen = new Set();
+    const unique = [];
+    for (let i = history.length - 1; i >= 0; i--) {
+        const q = history[i].question.trim().toLowerCase();
+        if (!seen.has(q)) {
+            seen.add(q);
+            unique.push({ ...history[i], originalIndex: i });
+        }
+        if (unique.length >= 25) break;
+    }
+
+    container.innerHTML = unique.map(item => {
+        const q = item.question.length > 35 ? item.question.substring(0, 35) + '…' : item.question;
+        const time = formatHistoryTime(item.timestamp);
+        const safeQ = item.question.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+        const idx = item.originalIndex;
+        return `
+            <div class="sidebar-item" onclick="loadConversation(${idx})" title="${item.question.replace(/"/g, '&quot;')}">
+                <div class="item-icon history-icon"><i class="fas fa-message"></i></div>
+                <div class="item-text">
+                    <div class="item-name">${q}</div>
+                    <div class="item-meta">${time}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function loadConversation(upToIndex) {
+    // Clear the current chat
+    const container = document.getElementById('chatContainer');
+    const welcomeMsg = document.getElementById('welcomeMessage');
+
+    // Remove all messages
+    container.querySelectorAll('.message').forEach(msg => msg.remove());
+
+    // Hide welcome
+    if (welcomeMsg) welcomeMsg.style.display = 'none';
+
+    // Load all messages up to and including the clicked index
+    const items = fullChatHistory.slice(0, upToIndex + 1);
+
+    items.forEach(item => {
+        addMessage('user', item.question, formatTimestamp(item.timestamp));
+        addMessage('bot', item.answer, formatTimestamp(item.timestamp), item.sources);
+    });
+
+    setTimeout(scrollToBottom, 300);
+
+    // Focus the input so user can continue the conversation
+    document.getElementById('queryInput').focus();
 }
 
 // ============================================================
@@ -659,7 +860,7 @@ async function uploadFiles() {
             formData.append('files', file);
         });
 
-        const response = await fetch('/upload', {
+        const response = await authFetch('/upload', {
             method: 'POST',
             body: formData
         });
@@ -956,7 +1157,7 @@ async function openSettings() {
 
     // Load current config from server
     try {
-        const response = await fetch('/config');
+        const response = await authFetch('/config');
         if (response.ok) {
             const config = await response.json();
             document.getElementById('cfgModel').value = config.model_name || '';
@@ -992,7 +1193,7 @@ async function saveSettings() {
     };
 
     try {
-        const response = await fetch('/config', {
+        const response = await authFetch('/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
