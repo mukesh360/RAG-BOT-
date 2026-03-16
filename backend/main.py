@@ -1,5 +1,5 @@
 # ============================================================
-# FASTAPI APPLICATION - UNIVERSAL RAG UI + SUPABASE AUTH
+# FASTAPI APPLICATION - UNIVERSAL RAG UI + SUPABASE AUTH + AGENTS
 # ============================================================
 
 import os
@@ -11,7 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
@@ -22,6 +22,7 @@ from .schemas import QueryRequest, QueryResponse, HistoryItem, UploadResponse, H
 from .storage import supabase_storage, document_storage
 from .auth.routes import router as auth_router
 from .auth.dependencies import get_current_user
+from .agents.routes import router as agents_router
 
 # ============================================================
 # APP INITIALIZATION
@@ -29,8 +30,8 @@ from .auth.dependencies import get_current_user
 
 app = FastAPI(
     title="DocIntel AI",
-    description="Universal RAG System with FastAPI + Supabase Auth",
-    version="2.0.0"
+    description="Universal RAG System with Agent Framework + Supabase Auth",
+    version="3.0.0"
 )
 
 # Get the project root directory
@@ -44,17 +45,18 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="stati
 # Templates
 templates = Jinja2Templates(directory=FRONTEND_DIR / "templates")
 
-# Initialize RAG system
+# Initialize RAG system (base documents)
 rag = UniversalRAG()
 
 # Temp directory for uploads
 TEMP_DIR = tempfile.mkdtemp()
 
 # ============================================================
-# INCLUDE AUTH ROUTER
+# INCLUDE ROUTERS
 # ============================================================
 
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 
 # ============================================================
 # STARTUP EVENT - LOAD BASE DOCUMENTS
@@ -91,6 +93,12 @@ async def login_page(request: Request):
 async def signup_page(request: Request):
     """Serve the signup page"""
     return templates.TemplateResponse("signup.html", {"request": request})
+
+
+@app.get("/agents-page", response_class=HTMLResponse)
+async def agents_page(request: Request):
+    """Serve the agents management page"""
+    return templates.TemplateResponse("agents.html", {"request": request})
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -134,7 +142,10 @@ async def clear_history(user: dict = Depends(get_current_user)):
 
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest, user: dict = Depends(get_current_user)):
-    """Process a question and return answer with sources (protected)"""
+    """
+    Process a question using the BASE RAG system.
+    If agent_id is provided, redirect logic to agent-specific RAG.
+    """
     question = request.question.strip()
 
     if not question:
@@ -142,11 +153,20 @@ async def query(request: QueryRequest, user: dict = Depends(get_current_user)):
 
     user_id = user["id"]
 
+    # If an agent_id is supplied, delegate to agent RAG
+    if request.agent_id:
+        from .agents.routes import query_agent_endpoint, AgentQueryRequest
+        from .schemas import AgentQueryRequest as AQR
+        return await query_agent_endpoint(
+            agent_id=request.agent_id,
+            request=AQR(question=question),
+            user=user
+        )
+
     # Check cache first (user-scoped)
     cached_answer, cached_sources = supabase_storage.find_cached(user_id, question)
 
     if cached_answer:
-        # Return cached response
         entry = supabase_storage.add(user_id, question, cached_answer, cached_sources)
         return QueryResponse(
             answer=cached_answer,
@@ -154,13 +174,13 @@ async def query(request: QueryRequest, user: dict = Depends(get_current_user)):
             timestamp=entry["timestamp"]
         )
 
-    # Get fresh answer from RAG
+    # Get fresh answer from base RAG
     try:
         answer, sources = rag.answer(question)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
-    # Store in history (user-scoped)
+    # Store in history (user-scoped, no agent_id for base queries)
     entry = supabase_storage.add(user_id, question, answer, sources)
 
     return QueryResponse(
@@ -171,8 +191,25 @@ async def query(request: QueryRequest, user: dict = Depends(get_current_user)):
 
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload_files(files: List[UploadFile] = File(...), user: dict = Depends(get_current_user)):
-    """Upload and index files (protected, stores metadata in Supabase)"""
+async def upload_files(
+    agent_id: str = Form(None),
+    files: List[UploadFile] = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """
+    Upload and index files.
+    If agent_id is provided, index into that agent's collection.
+    Otherwise, index into base RAG.
+    """
+    if agent_id and agent_id.strip():
+        from .agents.routes import upload_to_agent
+        result = await upload_to_agent(agent_id=agent_id, files=files, user=user)
+        return UploadResponse(
+            status=result["status"],
+            files_processed=result["files_processed"],
+            message=f"Successfully indexed to agent: {result.get('agent_name', 'Agent')}"
+        )
+
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 
@@ -181,12 +218,10 @@ async def upload_files(files: List[UploadFile] = File(...), user: dict = Depends
     user_id = user["id"]
 
     for file in files:
-        # Validate extension
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in allowed_extensions:
             continue
 
-        # Save to temp directory
         file_path = os.path.join(TEMP_DIR, file.filename)
         try:
             content = await file.read()

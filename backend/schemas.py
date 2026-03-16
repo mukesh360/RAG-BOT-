@@ -10,6 +10,13 @@ from datetime import datetime
 class QueryRequest(BaseModel):
     """Request model for /query endpoint"""
     question: str
+    agent_id: Optional[str] = None
+
+
+class AgentQueryRequest(BaseModel):
+    """Request model for /agents/{agent_id}/query endpoint"""
+    question: str
+    top_k: Optional[int] = 4
 
 
 class QueryResponse(BaseModel):
@@ -73,3 +80,21 @@ class AuthResponse(BaseModel):
     access_token: str
     user_email: str
     message: str
+
+
+# ============================================================
+# AGENT MODELS
+# ============================================================
+
+class AgentCreate(BaseModel):
+    """Request model for POST /agents/create"""
+    name: str
+    description: Optional[str] = ""
+
+
+class AgentOut(BaseModel):
+    """Response model for agent CRUD"""
+    id: str
+    name: str
+    description: Optional[str] = ""
+    created_at: Optional[str] = None

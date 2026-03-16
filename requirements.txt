@@ -4,6 +4,7 @@ langchain-community
 langchain-ollama
 langchain-chroma
 langchain-huggingface
+langchain-text-splitters
 
 # Vector DB and Search
 chromadb
@@ -26,6 +27,6 @@ python-multipart
 jinja2
 aiofiles
 
-# Supabase Auth
+# Supabase Auth + DB
 supabase
 python-dotenv

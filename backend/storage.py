@@ -57,8 +57,8 @@ class SupabaseChatStorage:
         # In-memory cache as fallback
         self._fallback = HistoryStorage()
 
-    def add(self, user_id: str, question: str, answer: str, sources: List[str]) -> dict:
-        """Insert a chat entry into Supabase for the given user"""
+    def add(self, user_id: str, question: str, answer: str, sources: List[str], agent_id: Optional[str] = None) -> dict:
+        """Insert a chat entry into Supabase for the given user (optionally linked to an agent)"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry = {
             "timestamp": timestamp,
@@ -68,12 +68,15 @@ class SupabaseChatStorage:
         }
 
         try:
-            self.supabase.table("chat_history").insert({
+            row = {
                 "user_id": user_id,
                 "question": question,
                 "answer": answer,
                 "sources": sources
-            }).execute()
+            }
+            if agent_id:
+                row["agent_id"] = agent_id
+            self.supabase.table("chat_history").insert(row).execute()
         except Exception as e:
             print(f"⚠️ Supabase chat_history insert failed: {e}")
             # Fallback to in-memory

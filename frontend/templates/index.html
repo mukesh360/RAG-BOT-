@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DocIntel AI - Universal RAG System</title>
     <meta name="description"
-        content="Intelligent document Q&A powered by RAG. Upload your documents and get instant, accurate answers.">
+        content="Intelligent document Q&A powered by RAG agents. Upload documents and get instant, accurate answers.">
 
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -35,7 +35,7 @@
     </div>
 
     <div class="app-container">
-        <!-- Header -->
+        <!-- ─── Header ─────────────────────────────────────── -->
         <header class="app-header">
             <div class="header-content">
                 <div class="logo">
@@ -43,6 +43,9 @@
                     <h1>DocIntel AI</h1>
                 </div>
                 <div class="header-actions">
+                    <!-- Active Agent Badge -->
+                    <span class="active-agent-badge" id="activeAgentBadge" style="display:none;"></span>
+
                     <button class="btn-voice-toggle" id="ttsToggle" onclick="toggleTTS()" title="Toggle voice output">
                         <i class="fas fa-volume-xmark"></i>
                         <span>Voice Off</span>
@@ -54,7 +57,10 @@
                         <i class="fas fa-rotate-right"></i>
                         <span>New Chat</span>
                     </button>
-                    <span class="tagline">✨ Agentic RAG Framework</span>
+                    <button class="btn-reset btn-manage-agents" onclick="window.location.href='/agents-page'" title="Manage your agents">
+                        <i class="fas fa-users-cog"></i>
+                        <span>Manage Agents &rarr;</span>
+                    </button>
                     <button class="btn-reset" onclick="handleLogout()" title="Sign out"
                         style="margin-left: 0.5rem; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3);">
                         <i class="fas fa-right-from-bracket"></i>
@@ -64,30 +70,47 @@
             </div>
         </header>
 
-        <!-- Main Content -->
+        <!-- ─── Main Content ──────────────────────────────── -->
         <div class="main-content">
-            <!-- Sidebar -->
+
+            <!-- ─── Sidebar ───────────────────────────────── -->
             <aside class="sidebar">
-                <div class="sidebar-section">
+                <!-- ═══ SECTION: UPLOAD DOCUMENTS ═════════ -->
+                <div class="sidebar-section" id="agentUploadSection">
                     <h3><i class="fas fa-cloud-arrow-up"></i> Upload Documents</h3>
-                    <div class="upload-area" id="uploadArea">
-                        <input type="file" id="fileInput" multiple accept=".csv,.pdf,.docx,.txt,.html" hidden>
-                        <div class="upload-content" onclick="document.getElementById('fileInput').click()">
+
+                    <div class="agent-selector-container mb-3">
+                        <label for="agentSelector" class="form-label text-muted small mb-1">Select Target Agent:</label>
+                        <select id="agentSelector" class="form-select custom-agent-select" onchange="handleAgentSelectionChange(this.value)">
+                            <option value="" disabled selected>Loading agents...</option>
+                        </select>
+                    </div>
+
+                    <p class="sidebar-hint" id="agentUploadHint" style="display:none;">Select an agent above first.</p>
+                    <div class="upload-area" id="agentUploadArea">
+                        <input type="file" id="agentFileInput" multiple
+                            accept=".csv,.pdf,.docx,.txt,.html"
+                            onchange="handleAgentFileSelect(event)" hidden>
+                        <div class="upload-content"
+                            onclick="document.getElementById('agentFileInput').click()">
                             <i class="fas fa-folder-open"></i>
                             <p>Drop or click</p>
                             <span class="file-types">CSV • PDF • DOCX • TXT • HTML</span>
                         </div>
                     </div>
-                    <div id="fileList" class="file-list"></div>
-                    <button id="uploadBtn" class="btn-upload" onclick="uploadFiles()" disabled>
+                    <div id="agentFileList" class="file-list"></div>
+                    <button id="agentUploadBtn" class="btn-upload" onclick="uploadToActiveAgent()" disabled>
                         <i class="fas fa-bolt"></i>
-                        <span>Process & Index</span>
+                        <span>Index to Agent</span>
                     </button>
-                    <div id="uploadStatus" class="upload-status"></div>
+                    <div id="agentUploadStatus" class="upload-status"></div>
+
+                    <!-- Agent indexed documents -->
+                    <div id="agentDocsContainer" class="agent-docs-container mt-3"></div>
                 </div>
             </aside>
 
-            <!-- Chat Area -->
+            <!-- ─── Chat Area ─────────────────────────── -->
             <main class="chat-area">
                 <div class="chat-container" id="chatContainer">
                     <!-- Welcome Message -->
@@ -96,8 +119,8 @@
                             <i class="fas fa-robot"></i>
                         </div>
                         <h2>Hello! I'm DocIntel AI</h2>
-                        <p>Your intelligent document assistant. Ask me anything about your files - I'll find the answers
-                            instantly.</p>
+                        <p>Your intelligent document assistant with multi-agent RAG. Select an agent or ask
+                            about base documents.</p>
 
                         <!-- Suggested Prompts -->
                         <div class="suggested-prompts">
@@ -147,7 +170,8 @@
                         <button class="btn-mic" id="micBtn" onclick="toggleMic()" title="Voice input (Ctrl+M)">
                             <i class="fas fa-microphone"></i>
                         </button>
-                        <input type="text" id="queryInput" placeholder="Ask me anything about your documents..."
+                        <input type="text" id="queryInput"
+                            placeholder="Ask me anything… (active agent or base knowledge)"
                             onkeypress="handleKeyPress(event)" autocomplete="off">
                         <button id="sendBtn" onclick="sendQuery()">
                             <i class="fas fa-paper-plane"></i>
@@ -159,7 +183,9 @@
         </div>
     </div>
 
-    <!-- Config Modal -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- CONFIG MODAL                                       -->
+    <!-- ═══════════════════════════════════════════════════ -->
     <div class="modal-overlay" id="configModal">
         <div class="config-modal">
             <div class="modal-header">
@@ -199,6 +225,8 @@
         </div>
     </div>
 
+
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -212,8 +240,19 @@
         }
     </script>
 
-    <!-- Custom JS -->
+    <!-- Agents JS -->
+    <script src="/static/js/agents.js"></script>
+
+    <!-- Voice JS -->
+    <script src="/static/js/voice.js"></script>
+
+    <!-- Custom App JS -->
     <script src="/static/js/app.js"></script>
+
+    <!-- Initialize agents (at end of body so DOM is already parsed) -->
+    <script>
+        initAgents();
+    </script>
 </body>
 
 </html>

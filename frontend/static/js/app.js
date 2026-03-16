@@ -333,13 +333,31 @@ async function sendQuery() {
     // Show typing indicator
     showTyping();
 
+    // Include active agent_id if one is selected
+    const agentId = (typeof getActiveAgentId === 'function') ? getActiveAgentId() : null;
+    const agentName = (typeof getActiveAgentName === 'function') ? getActiveAgentName() : null;
+
+    // Show agent context label on user message if applicable
+    if (agentId && agentName) {
+        const lastMsg = document.getElementById('chatContainer').lastElementChild;
+        if (lastMsg && lastMsg.classList.contains('user')) {
+            const ctx = document.createElement('div');
+            ctx.className = 'agent-context-label';
+            ctx.innerHTML = `<i class="fas fa-robot"></i> ${agentName}`;
+            lastMsg.querySelector('.message-content')?.appendChild(ctx);
+        }
+    }
+
     try {
+        const body = { question };
+        if (agentId) body.agent_id = agentId;
+
         const response = await authFetch('/query', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ question })
+            body: JSON.stringify(body)
         });
 
         if (!response.ok) {
@@ -747,11 +765,13 @@ function playSound(type) {
 
 function setupFileInput() {
     const fileInput = document.getElementById('fileInput');
+    if (!fileInput) return; // Agent-scoped upload uses agentFileInput instead
     fileInput.addEventListener('change', handleFileSelect);
 }
 
 function setupDragDrop() {
     const uploadArea = document.getElementById('uploadArea');
+    if (!uploadArea) return; // Agent-scoped upload uses agentUploadArea instead
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         uploadArea.addEventListener(eventName, preventDefaults, false);
